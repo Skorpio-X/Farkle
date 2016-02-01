@@ -44,6 +44,8 @@ def user_input(combos, chosen):
 
 def ai_input(combos, chosen, score, keep_going, dice_left):
     if combos:
+        if score < 200 and len(dice_left) > 3 and chosen:
+            return 'r'
         return combos.index(max(combos, key=lambda x: POINTS[x]))+1
     if not keep_going:
         if len(dice_left) < 3 and chosen or score >= 300 and chosen:
@@ -51,12 +53,13 @@ def ai_input(combos, chosen, score, keep_going, dice_left):
     return 'r'
 
 
-def play_turn(player, players, last_round):
+def play_turn(player, players, last_round, max_score):
     name = player['name']
     total_score = player['score']
     ai = player['ai']
     roll = roll_dice(6)
     score = 0
+    max_score = max_score
     chosen = False
     while True:
         infos = name, score, total_score
@@ -77,14 +80,16 @@ def play_turn(player, players, last_round):
         if ai:
             keep_going = False
             if last_round:
-                # TODO: Max score doesn't get the max score of all players
-                # in the last round, because the player list is filtered.
-                max_score = get_max_score(players)
                 keep_going = last_round and max_score > total_score
-                print(keep_going)
-                print(max_score, total_score)
+            print(keep_going)
+            print(max_score, total_score)
 
-            choice = ai_input(combos, chosen, score, keep_going, dice_left=roll)
+            choice = ai_input(
+                combos,
+                chosen,
+                score,
+                keep_going,
+                dice_left=roll)
             print('{} chooses {}.'.format(name, choice))
         else:
             choice = user_input(combos, chosen)
@@ -102,14 +107,22 @@ def play_turn(player, players, last_round):
     return score
 
 
-def play_round(players, last_round):
+def play_round(players):
     """Every player plays a round, return True if last round."""
+    last_round = False
+    max_score = TARGET_SCORE
+    if any(player['done'] for player in players):
+        last_round = True
+        max_score = get_max_score(players)
+        print('='*11, 'Last round', '='*12)
+        players = [player for player in players if not player['done']]
     for player in players:
-        player['score'] += play_turn(player, players, last_round)
+        player['score'] += play_turn(player, players, last_round, max_score)
+        if player['score'] >= TARGET_SCORE:
+            player['done'] = True
+            break
         print('-'*35)
-        if player['score'] >= TARGET_SCORE and not last_round:
-            return True  # Someone's over TARGET_SCORE.
-    return False  # Game is not over.
+    return last_round
 
 
 def print_status(players):
@@ -156,14 +169,8 @@ def main():
     print('The game begins.')
     game_over = False
     while not game_over:
-        game_over = play_round(players, last_round=False)
+        game_over = play_round(players)
         print_status(players)
-
-    print('='*11, 'Last round', '='*12)
-    remaining_players = [pl for pl in players if pl['score'] < TARGET_SCORE]
-    max_score = get_max_score(players)
-    play_round(remaining_players, max_score, last_round=True)
-    print_status(players)
 
     max_score = get_max_score(players)
     winners = [pl for pl in players if pl['score'] == max_score]
