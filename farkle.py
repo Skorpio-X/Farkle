@@ -12,7 +12,7 @@ import random
 from collections import OrderedDict
 from operator import itemgetter
 
-__version__ = '0.1.0'
+__version__ = '0.1.1'
 
 
 TARGET_SCORE = 10000
@@ -43,6 +43,7 @@ def user_input(combos, chosen):
 
 
 def ai_input(combos, chosen, score, keep_going, dice_left):
+    """AI's decision."""
     if combos:
         if score < 200 and len(dice_left) > 3 and chosen:
             return 'r'
@@ -156,7 +157,8 @@ def main():
     ai_players = input_to_int('Enter number of AI players: ')
     if not human_players and not ai_players:
         return None
-    names = ['Mary', 'Bob', 'Ben', 'Eryn', 'John', 'Ellen', 'Elizabeth']
+    names = ['Mary', 'Bob', 'Ben', 'Eryn', 'John',
+             'Ellen', 'Elizabeth', 'Jason']
     random.shuffle(names)
     players = []
     for num in range(1, human_players+1):
