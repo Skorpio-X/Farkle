@@ -3,7 +3,7 @@
 Roll 6 dice and choose a scoring combo. Then roll the remaining dice
 or end the turn.
 
-Author: Dunkelheitsforscher
+Author: Skorpio
 License: MIT
 """
 
