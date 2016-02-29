@@ -6,7 +6,7 @@ from pygame.locals import *
 
 from data.globs import TARGET_SCORE, POINTS, WINDOW_WIDTH, WINDOW_HEIGHT,FPS
 from data.globs import FONT, FONT2, BACKGROUND, screen, WHITE, DICE_SHEET
-from data.objects import Button, Player, DiceRoll
+from data.objects import Button, ButtonSmall, Player, DiceRoll
 
 SWITCHSCENE = USEREVENT
 MOVE_DOWN = USEREVENT + 1
@@ -64,8 +64,10 @@ class SceneManager:
             self.model.handle_events(event)
 
     def switchscene(self):
+        players_human = self.model.players_human
+        players_ai = self.model.players_ai
         self.view = View()
-        self.game = Game(player_num=3)
+        self.game = Game(players_human, players_ai)
         self.view.controller = self.game
 
     def switchscene_intro(self):
@@ -79,10 +81,10 @@ class SceneManager:
 class Game:
     """Game controller class."""
 
-    def __init__(self, player_num):
-        self.player_num = 3  # player_num
+    def __init__(self, players_human, players_ai):
+        self.player_num = players_human + players_ai
         self.players = [Player(num) #, ai=False)
-                        for num in range(1, player_num+1)]
+                        for num in range(1, self.player_num+1)]
         for player in self.players:
             player.score = 1000
         self.player_index = 0
@@ -286,22 +288,67 @@ class IntroModel:
         # Used a sprite to test MVC.
 #         self.player = Player(1)
 #         self.player.rect.topleft = 300, 100
-        self.button = Button((WINDOW_WIDTH//10*3, WINDOW_HEIGHT//10*3),
-                             text='Start game')
-        self.sprites.add(self.button)
+        self.button = Button(
+            pos=(WINDOW_WIDTH//10*3, WINDOW_HEIGHT//10*6),
+            text='Start game')
+        self.button_incr = ButtonSmall(
+            pos=(WINDOW_WIDTH//10*3, WINDOW_HEIGHT//10*2),
+            callback=self.increase_human_players,
+            text='+')
+        self.button_decr = ButtonSmall(
+            pos=(WINDOW_WIDTH//10*4, WINDOW_HEIGHT//10*2),
+            callback=self.decrease_human_players,
+            text='-')
+        self.button_incr_ai = ButtonSmall(
+            pos=(WINDOW_WIDTH//10*3, WINDOW_HEIGHT//10*4),
+            callback=self.increase_ai_players,
+            text='+')
+        self.button_decr_ai = ButtonSmall(
+            pos=(WINDOW_WIDTH//10*4, WINDOW_HEIGHT//10*4),
+            callback=self.decrease_ai_players,
+            text='-')
+
+        buttons = (self.button,
+                   self.button_incr,
+                   self.button_decr,
+                   self.button_incr,
+                   self.button_incr_ai,
+                   self.button_decr_ai)
+
+        for button in buttons:
+            self.sprites.add(button)
+
+        self.players_human = 1
+        self.players_ai = 2
 
     def handle_events(self, event):
         if event.type == MOVE_DOWN:
             print(event)
             self.player.rect.y += 30
+        for sprite in self.sprites:
+            sprite.handle_event(event)
+
+    def increase_human_players(self):
+        if self.players_human < 10:
+            self.players_human += 1
+
+    def decrease_human_players(self):
+        if self.players_human > 0:
+            self.players_human -= 1
+
+    def increase_ai_players(self):
+        if self.players_ai < 10:
+            self.players_ai += 1
+
+    def decrease_ai_players(self):
+        if self.players_ai > 0:
+            self.players_ai -= 1
 
 
 class IntroController:
 
     def __init__(self, model):
         self.done = False
-        self.human_players = 0
-        self.ai_players = 0
         self.model = model
 
     def handle_events(self, event):
@@ -328,8 +375,16 @@ class IntroView:
 
     def draw(self, screen, dt):
         screen.blit(BACKGROUND, (0, 0))
-        txt = FONT.render("Choose players", True, WHITE)
-        screen.blit(txt, (self.width//8, self.height//8))
+        txt = FONT2.render('--- FARKLE ---', True, WHITE)
+        screen.blit(txt, (self.width//2-150, self.height//100*5))
+        
+        txt = FONT.render('Human players {}'.format(self.model.players_human),
+                           True, WHITE)
+        screen.blit(txt, (self.width//100*53, self.height//100*23))
+        
+        txt = FONT.render('Computer players {}'.format(self.model.players_ai),
+                           True, WHITE)
+        screen.blit(txt, (self.width//100*53, self.height//100*43))
         self.model.sprites.draw(screen)
 #         screen.blit(DICE_SHEET, (10, 300))
         pg.display.flip()

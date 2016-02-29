@@ -56,7 +56,7 @@ for dice_num, i in zip(range(6, 0, -1), range(0, 5*128 + 1, 128)):
 BACKGROUND = load(os.path.join('graphics', 'background2.png'))
 BUTTON = load(os.path.join('graphics', 'Button.png'), alpha=True)
 BUTTON2 = load(os.path.join('graphics', 'Button2.png'), alpha=True)
-BUTTON3 = load(os.path.join('graphics', 'Button2.png'), alpha=True)
+BUTTON3 = load(os.path.join('graphics', 'Button3.png'), alpha=True)
 
 FONT = pg.font.Font(None, 30)
 FONT2 = pg.font.Font(None, 46)
