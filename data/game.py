@@ -5,8 +5,8 @@ import pygame as pg
 from pygame.locals import *
 
 from data.globs import TARGET_SCORE, POINTS, WINDOW_WIDTH, WINDOW_HEIGHT,FPS
-from data.globs import FONT, IMAGES, DICE_SHEET, BACKGROUND, screen, GREEN, BUTTON
-
+from data.globs import FONT, FONT2, BACKGROUND, screen, WHITE, DICE_SHEET
+from data.objects import Button, Player, DiceRoll
 
 SWITCHSCENE = USEREVENT
 MOVE_DOWN = USEREVENT + 1
@@ -14,44 +14,6 @@ MOVE_DOWN = USEREVENT + 1
 
 def post_event(event):
     pg.event.post(pg.event.Event(event))
-
-class Die(pg.sprite.Sprite):
-
-    def __init__(self, *sprite_groups):
-        super().__init__(sprite_groups)
-        self.sheet = DICE_SHEET
-        self.state = 0
-        self.frames = self.create_frames()
-        self.current_image = self.frames[0]
-        self.image = self.current_image
-        self.rect = self.image.get_rect()
-        # TODO: Shouldn't be necessary to convert the dice
-        # nums with this mapping.
-        self.num_map = {6: 0, 5: 1, 4: 2, 3: 3, 2: 4, 1: 5}
-
-    def create_frames(self):
-        frames = []
-        for i in range(6):
-            rect = pg.Rect((128*i, 0, 128, 128))
-            image = self.sheet.subsurface(rect)
-            frames.append(image)
-        return frames
-
-    @property
-    def face(self):
-        return self.image
-
-    @face.setter
-    def face(self, num):
-        self.state = self.num_map[num]
-        self.image = self.frames[self.state]
-
-    def draw(self, surface, pos):
-        surface.blit(self.current_image, pos)
-
-
-def roll_dice(num):
-    return ''.join(sorted(str(random.randint(1, 6)) for _ in range(num)))
 
 
 def ai_input(combos, chosen, score, keep_going, dice_left):
@@ -66,28 +28,12 @@ def ai_input(combos, chosen, score, keep_going, dice_left):
     return 'r'
 
 
-def get_max_score(players):
-    return max(players, key=itemgetter('score'))['score']
-
-
-class Player:
-
-    def __init__(self, name):
-        self.name = name
-        self.score = 0
-
-
 class SceneManager:
     """Manages scenes and contains the main and event loop."""
 
     def __init__(self):
-        self.scenes = []
-        view = View()
-        self.game = Game(player_num=3)
-        view.controller = self.game
-        self.scenes.append(self.game)
-        self.scenes.append(view)
-
+        self.fps_clock = pg.time.Clock()
+        self.dt = self.fps_clock.tick()
         self.model = IntroModel()
         self.view = IntroView(self.model)
         self.game = IntroController(self.model)
@@ -98,7 +44,9 @@ class SceneManager:
     def run(self):
         while not self.game.done:
             self.handle_events()
-            self.view.draw()
+            self.game.update(self.dt, self.fps_clock.get_fps())
+            self.view.draw(screen, self.dt)
+            self.dt = self.fps_clock.tick(FPS)
         pg.quit()
         sys.exit()
 
@@ -121,10 +69,10 @@ class SceneManager:
         self.view.controller = self.game
 
     def switchscene_intro(self):
-        self.view = IntroView()
-        self.game = IntroController()
-        self.view.controller = self.game
         self.model = IntroModel()
+        self.view = IntroView(self.model)
+        self.game = IntroController(self.model)
+        self.view.controller = self.game
         self.view.model = self.model
 
 
@@ -132,41 +80,148 @@ class Game:
     """Game controller class."""
 
     def __init__(self, player_num):
-        self.player_num = player_num
+        self.player_num = 3  # player_num
+        self.players = [Player(num) #, ai=False)
+                        for num in range(1, player_num+1)]
+        for player in self.players:
+            player.score = 1000
+        self.player_index = 0
+        self.player = self.players[self.player_index]
+        self.score = 0
         self.done = False
-        self.fps_clock = pg.time.Clock()
-        self.dt = self.fps_clock.tick()
-        self.dice = pg.sprite.Group()
-        self.roll = sorted(random.randint(1, 6) for _ in range(1, 7))
-        for i in range(6):
-            die = Die(self.dice)
-            die.rect.topleft = (128*i, 128)
-            die.face = self.roll[i]
+        self.dice = DiceRoll(6)
+        self.dice_left = len(self.dice)
+        self.selected_dice = []
+        self.farkled = False
+        self.can_bank = False
+        self.can_roll = False
+        self.last_round = False
+        self.game_over = False
+        self.max_score = 1000
+        self.high_score = 0
+        self.winner = None
+        self.last_round_counter = self.player_num
 
-    def run(self):
-        self.dt = self.fps_clock.tick(FPS)
+        self.button_add = Button(pos=(WINDOW_WIDTH/100*4, WINDOW_HEIGHT/12*5),
+                                 callback=self.add_score, text='Add score')
+        self.button_roll = Button(pos=(WINDOW_WIDTH/100*4, WINDOW_HEIGHT/12*7),
+                                  callback=self.roll, text='Roll')
+        self.button_bank = Button(pos=(WINDOW_WIDTH/100*4, WINDOW_HEIGHT/12*9),
+                                  callback=self.bank, text='Bank')
+        self.buttons = [self.button_add, self.button_roll, self.button_bank]
 
     def handle_events(self, event):
         if event.type == pg.QUIT:
             self.done = True
         if event.type == pg.MOUSEBUTTONDOWN:
-            # get button pressed
-            # (button1, button2, button3,) = pg.mouse.get_pressed()
             if event.button == 1:
-                pass
-        if event.type == pg.KEYDOWN:
-            if event.key == pg.K_a:
-                self.roll = roll_dice(6)
-                self.update_dice()
-            if event.key == pg.K_s:
-                pg.event.post(pg.event.Event(SWITCHSCENE))
-#             if event.type == pg.KEYUP:
-#                 if event.key == pg.K_a:
-#                     player.vel = (0, 0)
+                if self.farkled:
+                    self.farkled = False
+                    self.roll()
+                no_collisions = True
+                for die in self.dice:
+                    collided = die.rect.collidepoint(event.pos)
+                    # Deselect one die.
+                    if collided and die in self.selected_dice:
+                        idx = self.selected_dice.index(die)
+                        del self.selected_dice[idx]
+                        no_collisions = False
+                    # Select one die.
+                    elif collided:
+                        self.selected_dice.append(die)
+                        no_collisions = False
+                # Deselect all.
+                clicked_button = self.button_add.rect.collidepoint(event.pos)
+                if no_collisions and not clicked_button:
+                    self.selected_dice = []
 
-    def update_dice(self):
-        for idx, die in enumerate(self.dice):
-            die.face = int(self.roll[idx])
+        if event.type == pg.KEYDOWN:
+            if event.key == pg.K_ESCAPE:
+                post_event(SWITCHSCENE)
+            if event.key == pg.K_RETURN:
+                self.add_score()
+            if event.key == pg.K_a:
+                self.roll()
+            if event.key == pg.K_f:
+                print(self.dice)
+        for button in self.buttons:
+            button.handle_event(event)
+
+    def update(self, dt, fps):
+        self.dt = dt
+        self.fps = fps
+        if self.last_round and self.last_round_counter <= 0 and not self.game_over:
+            self.set_game_over()
+
+#         if self.player.ai:
+#             self.player.choose_dice()
+
+    def roll(self):
+        if self.can_roll:
+            self.dice = DiceRoll(self.dice_left)
+            self.selected_dice = []
+            print('self.dice', self.dice)
+            string_dice = str(self.dice)
+            self.farkled = not any(combo in string_dice for combo in POINTS)
+            if self.farkled:
+                print('Farkled')
+                self.next_player()
+            else:
+                self.can_roll = False
+                self.can_bank = False
+
+    def next_player(self):
+        self.can_roll = True
+        self.dice_left = 6
+        self.score = 0
+        self.player_index = (self.player_index + 1) % self.player_num
+        self.player = self.players[self.player_index]
+        if self.winner == self.player:
+            self.player_index = (self.player_index + 1) % self.player_num
+            self.player = self.players[self.player_index]
+        if self.last_round:
+            self.last_round_counter -= 1
+
+    def add_score(self):
+        """Add selected dice to self.score."""
+        selected = ''.join(map(str, sorted(self.selected_dice)))
+        print('selected', selected)
+        print('dice', self.selected_dice)
+        try:
+            print(POINTS[selected])
+            self.score += POINTS[selected]
+        except KeyError:
+            print('Not a valid combo.')
+        else:
+            self.dice.remove(self.selected_dice)
+            self.can_roll = True
+            self.can_bank = True
+        self.selected_dice = []
+        self.dice_left = len(self.dice)
+        if self.dice_left == 0:
+            self.dice_left = 6
+
+    def bank(self):
+        if self.can_bank:
+            self.player.score += self.score
+            if self.player.score >= self.max_score and not self.last_round:
+                self.last_round = True
+                self.high_score = self.player.score
+                self.winner = self.player
+                print('Last round')
+            self.high_score = max(p.score for p in self.players)
+            self.score = 0
+            self.next_player()
+            self.can_bank = False
+            self.dice.empty()
+
+    def set_game_over(self):
+        self.game_over = True
+        self.can_roll = False
+        self.can_bank = False
+        self.winner = [player for player in self.players
+                       if player.score == self.high_score]
+        print('Game over')
 
 
 class View:
@@ -175,70 +230,70 @@ class View:
         self.width = WINDOW_WIDTH
         self.height = WINDOW_HEIGHT
 
-    def draw(self):
+    def draw(self, screen, dt):
         screen.blit(BACKGROUND, (0, 0))
-        txt = FONT.render("Choose dice", True, GREEN)
-        screen.blit(txt, (self.width/10, self.height/10))
-        txt = FONT.render("dt {} fps {}".format(
-            self.controller.dt, self.controller.fps_clock), True, GREEN)
-        screen.blit(txt, (self.width/10, self.height/7))
+
+#         fps_txt = FONT.render('dt {} fps {:.2f}'.format(
+#             dt, self.controller.fps), True, WHITE)
+#         screen.blit(fps_txt, (WINDOW_WIDTH/100*70, self.height/10))
+
+        score_txt = 'Score {}'.format(self.controller.score)
+        score_font = FONT.render(score_txt, True, WHITE)
+        screen.blit(score_font, (WINDOW_WIDTH/100*40, WINDOW_HEIGHT/12*5.3))
+
+        total_score = 'Total score {}'.format(self.controller.player.score)
+        tot_score = FONT.render(total_score, True, WHITE)
+        screen.blit(tot_score, (WINDOW_WIDTH/100*40, WINDOW_HEIGHT/12*7.3))
+
+        high_score = 'High score {}'.format(self.controller.high_score)
+        high_score2 = FONT.render(high_score, True, WHITE)
+        screen.blit(high_score2, (WINDOW_WIDTH/100*40, WINDOW_HEIGHT/12*9.3))
+
         self.controller.dice.draw(screen)
+        for die in self.controller.selected_dice:
+            pg.draw.rect(screen, (100, 200, 56), die.rect, 2)
+        for button in self.controller.buttons:
+            button.draw(screen)
+
+        if self.controller.farkled:
+            farkled = FONT.render('--- FARKLED ---', True, pg.Color('red'))
+            screen.blit(farkled, (WINDOW_WIDTH/100*30, WINDOW_HEIGHT/12*3))
+
+        player = "{}'s turn.".format(self.controller.player.name)
+        txt = FONT.render(player, True, WHITE)
+        screen.blit(txt, (WINDOW_WIDTH/100*4, self.height/10))
+
+        if self.controller.last_round:
+            last = FONT2.render('Last round!', True, WHITE)
+            screen.blit(last, (WINDOW_WIDTH/100*4, self.height/22))
+
+        if self.controller.game_over:
+            winner = ', '.join(str(player.name) for player in self.controller.winner)
+            game_over_txt = 'GAME OVER - The winner is {}'.format(winner)
+            game_over = FONT2.render(game_over_txt, True, WHITE)
+            screen.blit(game_over, (WINDOW_WIDTH/100*4, WINDOW_HEIGHT/10*9))
 
         pg.display.flip()
 
     def handle_events(self, event):
         pass
 
-class Button(pg.sprite.Sprite):
-
-    def __init__(self, pos=(0, 0), callback=None, text=None):
-        super().__init__()
-        self.image = BUTTON
-        self.rect = self.image.get_rect()
-        self.pos = pos
-        self.rect.topleft = self.pos
-        self.callback = callback
-        self.text = text
-        if self.text:
-            txt = FONT.render(self.text, True, Color('white'))
-            self.image.blit(txt, (50, 50))
-
-    def handle_event(self, event):
-        collided = self.rect.collidepoint(event.pos)
-        if hasattr(event, 'pos') and collided and self.callback:
-            self.callback()
-
-    def draw(self, screen):
-        screen.blit(self.image, self.pos)
-
-
-class NewEvent:
-
-    def __init__(self, type_):
-        self.type = type_
-
-
-class Player(pg.sprite.Sprite):
-
-    def __init__(self):
-        super().__init__()
-        self.image = pg.Surface((20, 40))
-        self.image.fill(Color('red'))
-        self.rect = self.image.get_rect()
-
-    def move_down(self):
-        self.rect.y += 30
-
 
 class IntroModel:
 
     def __init__(self):
         self.sprites = pg.sprite.Group()
-        self.player = Player()
-        self.player.rect.topleft = 300, 100
+        # Used a sprite to test MVC.
+#         self.player = Player(1)
+#         self.player.rect.topleft = 300, 100
         self.button = Button((WINDOW_WIDTH//10*3, WINDOW_HEIGHT//10*3),
                              text='Start game')
-        self.sprites.add(self.player, self.button)
+        self.sprites.add(self.button)
+
+    def handle_events(self, event):
+        if event.type == MOVE_DOWN:
+            print(event)
+            self.player.rect.y += 30
 
 
 class IntroController:
@@ -255,13 +310,13 @@ class IntroController:
         if event.type == pg.KEYDOWN:
             if event.key == pg.K_s:
                 post_event(MOVE_DOWN)
-        if event.type == MOVE_DOWN:
-            self.player.rect.y += 30
         if event.type == pg.MOUSEBUTTONDOWN:
-            if event.button == 1 and self.button.rect.collidepoint(event.pos):
-                new_event = pg.event.Event(SWITCHSCENE)
-                print('mouse click', event.pos)
-                pg.event.post(new_event)
+            collided = self.model.button.rect.collidepoint(event.pos)
+            if event.button == 1 and collided:
+                post_event(SWITCHSCENE)
+
+    def update(self, dt, fps):
+        pass
 
 
 class IntroView:
@@ -271,11 +326,12 @@ class IntroView:
         self.height = WINDOW_HEIGHT
         self.model = model
 
-    def draw(self):
+    def draw(self, screen, dt):
         screen.blit(BACKGROUND, (0, 0))
-        txt = FONT.render("Choose players", True, GREEN)
+        txt = FONT.render("Choose players", True, WHITE)
         screen.blit(txt, (self.width//8, self.height//8))
         self.model.sprites.draw(screen)
+#         screen.blit(DICE_SHEET, (10, 300))
         pg.display.flip()
 
     def handle_events(self, event):
