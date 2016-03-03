@@ -1,4 +1,5 @@
 import random
+import time
 import sys
 
 import pygame as pg
@@ -14,18 +15,6 @@ MOVE_DOWN = USEREVENT + 1
 
 def post_event(event):
     pg.event.post(pg.event.Event(event))
-
-
-def ai_input(combos, chosen, score, keep_going, dice_left):
-    """AI's decision."""
-    if combos:
-        if score < 200 and len(dice_left) > 3 and chosen:
-            return 'r'
-        return combos.index(max(combos, key=lambda x: POINTS[x]))+1
-    if not keep_going:
-        if len(dice_left) < 3 and chosen or score >= 300 and chosen:
-            return 'e'
-    return 'r'
 
 
 class SceneManager:
@@ -83,10 +72,13 @@ class Game:
 
     def __init__(self, players_human, players_ai):
         self.player_num = players_human + players_ai
-        self.players = [Player(num) #, ai=False)
-                        for num in range(1, self.player_num+1)]
-        for player in self.players:
-            player.score = 1000
+        self.players = [Player('Player {}'.format(num), ai=False)
+                        for num in range(1, players_human+1)]
+        self.players.extend(Player('AI {}'.format(num), ai=True)
+                            for num in range(1, players_ai+1))
+        random.shuffle(self.players)
+#         for player in self.players:
+#             player.score = 1000
         self.player_index = 0
         self.player = self.players[self.player_index]
         self.score = 0
@@ -99,7 +91,7 @@ class Game:
         self.can_roll = False
         self.last_round = False
         self.game_over = False
-        self.max_score = 1000
+        self.max_score = 3000
         self.high_score = 0
         self.winner = None
         self.last_round_counter = self.player_num
@@ -155,14 +147,28 @@ class Game:
         if self.last_round and self.last_round_counter <= 0 and not self.game_over:
             self.set_game_over()
 
-#         if self.player.ai:
-#             self.player.choose_dice()
+        # AI turn.
+        if self.player.ai:
+            # TODO: sleep delays the game.
+            # TODO: AI skips player farkle.
+            time.sleep(1)
+            ai_decision = self.player.choose_dice(self.dice, self.score)
+            if ai_decision == 'roll':
+                print('ai roll')
+                self.roll()
+            elif ai_decision == 'bank':
+                print('ai bank')
+                self.bank()
+            else:  # score
+                print('ai score')
+                self.selected_dice = ai_decision
+                self.add_score()
 
     def roll(self):
         if self.can_roll:
             self.dice = DiceRoll(self.dice_left)
             self.selected_dice = []
-            print('self.dice', self.dice)
+            print('Dice roll:', self.dice)
             string_dice = str(self.dice)
             self.farkled = not any(combo in string_dice for combo in POINTS)
             if self.farkled:
@@ -189,6 +195,7 @@ class Game:
         selected = ''.join(map(str, sorted(self.selected_dice)))
         print('selected', selected)
         print('dice', self.selected_dice)
+        print('Dice before remove:', self.dice)
         try:
             print(POINTS[selected])
             self.score += POINTS[selected]
@@ -196,6 +203,7 @@ class Game:
             print('Not a valid combo.')
         else:
             self.dice.remove(self.selected_dice)
+            print('Dice after remove:', self.dice)
             self.can_roll = True
             self.can_bank = True
         self.selected_dice = []
