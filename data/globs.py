@@ -58,9 +58,10 @@ POINTS = OrderedDict((
 
 FPS = 30
 
-IMAGES = {}
-for i in range(1, 7):
-    IMAGES[i] = load(os.path.join('graphics', 'dice{}.png'.format(i)), alpha=True)
+# Old images.
+# IMAGES = {}
+# for i in range(1, 7):
+#     IMAGES[i] = load(os.path.join('graphics', 'dice{}.png'.format(i)), alpha=True)
 
 sheet = load(os.path.join('graphics', 'sheet', 'monti3.png'), alpha=True)
 DICE_SHEET = load(os.path.join('graphics', 'sheet', 'monti5.png'), alpha=True)
