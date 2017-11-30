@@ -1,3 +1,26 @@
+# The MIT License (MIT)
+#
+# Copyright (c) 2016 Skorpio
+# 
+# Permission is hereby granted, free of charge, to any person obtaining a
+# copy of this software and associated documentation files (the "Software"),
+# to deal in the Software without restriction, including without limitation
+# the rights to use, copy, modify, merge, publish, distribute, sublicense,
+# and/or sell copies of the Software, and to permit persons to whom the
+# Software is furnished to do so, subject to the following conditions:
+# 
+# The above copyright notice and this permission notice shall be
+# included in all copies or substantial portions of the Software.
+# 
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+# EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
+# OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+# NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+# HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+# WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+# FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+# OTHER DEALINGS IN THE SOFTWARE.
+
 import random
 import time
 import sys
@@ -66,7 +89,8 @@ class SceneManager:
         self.view.controller = self.game
         self.view.model = self.model
 
-
+# TODO: Score display of all players.
+# TODO: Check if player order is changed in last round.
 class Game:
     """Game controller class."""
 
@@ -91,24 +115,25 @@ class Game:
         self.can_roll = False
         self.last_round = False
         self.game_over = False
-        self.max_score = 3000
+        self.max_score = 10000
         self.high_score = 0
         self.winner = None
         self.last_round_counter = self.player_num
+        self.ai_wait_time = 20
 
         self.button_add = Button(pos=(WINDOW_WIDTH/100*4, WINDOW_HEIGHT/12*5),
-                                 callback=self.add_score, text='Add score')
+                                 callback=self.button_add_score, text='Add score')
         self.button_roll = Button(pos=(WINDOW_WIDTH/100*4, WINDOW_HEIGHT/12*7),
-                                  callback=self.roll, text='Roll')
+                                  callback=self.button_roll, text='Roll')
         self.button_bank = Button(pos=(WINDOW_WIDTH/100*4, WINDOW_HEIGHT/12*9),
-                                  callback=self.bank, text='Bank')
+                                  callback=self.button_bank, text='Bank')
         self.buttons = [self.button_add, self.button_roll, self.button_bank]
 
     def handle_events(self, event):
         if event.type == pg.QUIT:
             self.done = True
         if event.type == pg.MOUSEBUTTONDOWN:
-            if event.button == 1:
+            if event.button == 1 and not self.player.ai:
                 if self.farkled:
                     self.farkled = False
                     self.roll()
@@ -136,33 +161,45 @@ class Game:
                 self.add_score()
             if event.key == pg.K_a:
                 self.roll()
-            if event.key == pg.K_f:
-                print(self.dice)
+#             if event.key == pg.K_f:
+#                 print(self.dice)
         for button in self.buttons:
             button.handle_event(event)
 
     def update(self, dt, fps):
         self.dt = dt
         self.fps = fps
-        if self.last_round and self.last_round_counter <= 0 and not self.game_over:
+        if not self.game_over and self.last_round_counter <= 0:
             self.set_game_over()
 
         # AI turn.
-        if self.player.ai:
-            # TODO: sleep delays the game.
-            # TODO: AI skips player farkle.
-            time.sleep(1)
-            ai_decision = self.player.choose_dice(self.dice, self.score)
-            if ai_decision == 'roll':
-                print('ai roll')
-                self.roll()
-            elif ai_decision == 'bank':
-                print('ai bank')
-                self.bank()
-            else:  # score
-                print('ai score')
-                self.selected_dice = ai_decision
-                self.add_score()
+        if self.player.ai and not self.game_over:
+            self.ai_wait_time -= 1
+            if self.ai_wait_time <= 0:
+                self.ai_wait_time = 20
+                ai_decision = self.player.choose_dice(self.dice, self.score)
+                if ai_decision == 'roll':
+                    print('ai roll')
+                    self.roll()
+                elif ai_decision == 'bank':
+                    print('ai bank')
+                    self.bank()
+                else:  # score
+                    print('ai score')
+                    self.selected_dice = ai_decision
+                    self.add_score()
+
+    def button_roll(self):
+        if not self.player.ai:
+            self.roll()
+
+    def button_add_score(self):
+        if not self.player.ai:
+            self.add_score()
+
+    def button_bank(self):
+        if not self.player.ai:
+            self.bank()
 
     def roll(self):
         if self.can_roll:
@@ -193,9 +230,9 @@ class Game:
     def add_score(self):
         """Add selected dice to self.score."""
         selected = ''.join(map(str, sorted(self.selected_dice)))
-        print('selected', selected)
-        print('dice', self.selected_dice)
-        print('Dice before remove:', self.dice)
+#         print('selected', selected)
+#         print('dice', self.selected_dice)
+#         print('Dice before remove:', self.dice)
         try:
             print(POINTS[selected])
             self.score += POINTS[selected]
@@ -203,7 +240,7 @@ class Game:
             print('Not a valid combo.')
         else:
             self.dice.remove(self.selected_dice)
-            print('Dice after remove:', self.dice)
+#             print('Dice after remove:', self.dice)
             self.can_roll = True
             self.can_bank = True
         self.selected_dice = []
@@ -266,7 +303,7 @@ class View:
             button.draw(screen)
 
         if self.controller.farkled:
-            farkled = FONT.render('--- FARKLED ---', True, pg.Color('red'))
+            farkled = FONT2.render('--- FARKLED ---', True, pg.Color('red'))
             screen.blit(farkled, (WINDOW_WIDTH/100*30, WINDOW_HEIGHT/12*3))
 
         player = "{}'s turn.".format(self.controller.player.name)
