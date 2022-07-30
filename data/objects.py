@@ -20,14 +20,18 @@
 # WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 # OTHER DEALINGS IN THE SOFTWARE.
-
+import json
 import random
 
 import pygame as pg
 from pygame.locals import *
 
+from data.expected_value_table import exp_of_dice
 from data.globs import DICE_SHEET, FONT, FONT2, DICE_SHADOW, DICE_IMAGES
 from data.globs import BUTTON2, BUTTON3, POINTS
+
+with open("data/expected_values.json", "r") as f:
+    EXP_DICT = json.load(f)
 
 
 def roll_dice(num):
@@ -51,45 +55,35 @@ class Player(pg.sprite.Sprite):
         self.rect.y += 30
 
     def choose_dice(self, dice, score):
-        # TODO: Doesn't handle hot dice.
-        if not dice:  # Hot dice. Test needed.
+        # updated in July 2022 to take into consideration maximum expected value strategy.
+        dice_left = str(dice)
+        combos = [combo for combo in POINTS if combo in dice_left]
+        """AI's decision."""
+        max_exp = 0
+        best_c = None
+        dice_id = str(len(dice_left))
+        if dice_id == '0':  # if no dice are left you have the option to roll 6 dice
+            dice_id = '6'
+        if self.chosen:
+            max_exp = EXP_DICT[str(score)][dice_id]
+        for c in combos:
+            new_exp = exp_of_dice(dice_left.replace(c, '', 1), score + POINTS[c], EXP_DICT)
+            if new_exp > max_exp:
+                max_exp = new_exp
+                best_c = c
+        if best_c is not None:
+            selected_dice = []
+            for char in best_c:
+                for die in dice:
+                    if int(char) == die.num and not die in selected_dice:
+                        selected_dice.append(die)
+                        break
+            return selected_dice
+        # if keep_going:
+        #     return 'r'
+        if EXP_DICT[str(score)][dice_id] > score:
             return 'roll'
-        string_dice = str(dice)
-        max_combo = ''
-        for combo in POINTS:
-            if combo in string_dice:
-                max_combo = combo
-                break
-        if max_combo:
-            if score < 200 and len(dice) > 3 and self.chosen:
-                self.chosen = False
-                return 'roll'
-            else:  # Choose dice.
-                self.chosen = True
-                selected_dice = []
-                for char in max_combo:
-                    for die in dice:
-                        if int(char) == die.num and not die in selected_dice:
-                            selected_dice.append(die)
-                            break
-                return selected_dice
-        if len(dice) < 3 and self.chosen or score >= 300 and self.chosen:
-            self.chosen = False
-            return 'bank'
-        return 'roll'
-
-# From the text version of the game.
-def ai_input(combos, chosen, score, keep_going, dice_left):
-    """AI's decision."""
-    if combos:
-        if score < 200 and len(dice_left) > 3 and chosen:
-            return 'r'
-        return combos.index(max(combos, key=lambda x: POINTS[x]))+1
-    if not keep_going:
-        if len(dice_left) < 3 and chosen or score >= 300 and chosen:
-            return 'e'
-    return 'r'
-        
+        return 'bank'
 
 
 class Die(pg.sprite.Sprite):
@@ -102,10 +96,10 @@ class Die(pg.sprite.Sprite):
 
     def __str__(self):
         return str(self.num)
-    
+
     def __lt__(self, other):
         return self.num < other.num
-    
+
     def __gt__(self, other):
         return self.num > other.num
 
