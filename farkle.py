@@ -31,26 +31,19 @@ or end the turn.
 Author: Skorpio
 License: MIT
 """
-
-
+import json
 import random
-from collections import OrderedDict
 from operator import itemgetter
+
+from data.expected_value_table import exp_of_dice, POINTS
 
 __version__ = '0.1.1'
 
 
+with open("data/expected_values.json", "r") as f:
+    EXP_DICT = json.load(f)
+
 TARGET_SCORE = 10000
-POINTS = OrderedDict((
-    ('111', 1000),
-    ('666', 600),
-    ('555', 500),
-    ('444', 400),
-    ('333', 300),
-    ('222', 200),
-    ('1', 100),
-    ('5', 50),
-    ))
 
 
 def roll_dice(num):
@@ -68,15 +61,27 @@ def user_input(combos, chosen):
 
 
 def ai_input(combos, chosen, score, keep_going, dice_left):
-    """AI's decision."""
-    if combos:
-        if score < 200 and len(dice_left) > 3 and chosen:
-            return 'r'
-        return combos.index(max(combos, key=lambda x: POINTS[x]))+1
-    if not keep_going:
-        if len(dice_left) < 3 and chosen or score >= 300 and chosen:
-            return 'e'
-    return 'r'
+    """AI's decision. Updated July 2022 to incorperate maximum expected value strategy"""
+    max_exp = 0
+    best_c = None
+    dice_id = str(len(dice_left))
+    if dice_id == '0': # if no dice are left you have the option to roll 6 dice
+        dice_id = '6'
+    if chosen:
+        max_exp = EXP_DICT[str(score)][dice_id]
+    for c in combos:
+        new_exp = exp_of_dice(dice_left.replace(c, '', 1), score + POINTS[c], EXP_DICT)
+        if new_exp > max_exp:
+            max_exp = new_exp
+            best_c = c
+    if best_c is not None:
+        return combos.index(best_c) + 1
+    if keep_going:
+        return 'r'
+    if EXP_DICT[str(score)][dice_id] > score:
+        return 'r'
+    return 'e'
+
 
 
 def play_turn(player, players, last_round, max_score):
